@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Dice Roller V6 - History Log</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* --- LAYOUT SPLIT --- */
+        #canvas-container { height: 65vh; width: 100%; position: relative; background: radial-gradient(circle at center, #3a3a3a 0%, #1a1a1a 100%); }
+        #ui-container { height: 35vh; width: 100%; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; padding: 15px; box-sizing: border-box; border-top: 1px solid #333; z-index: 20; position: relative; box-shadow: 0 -10px 30px rgba(0,0,0,0.5); }
+        
+        /* --- DICE SELECTOR --- */
+        #toggles-container { position: absolute; bottom: 20px; left: 0; right: 0; display: flex; justify-content: center; gap: 15px; z-index: 10; pointer-events: none; }
+        .toggle-btn { width: 40px; height: 40px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.9); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 4px 10px rgba(0,0,0,0.5); pointer-events: auto; }
+        .toggle-off { opacity: 0.2; transform: scale(0.8); border-color: rgba(255,255,255,0.2); filter: grayscale(100%); }
+        .toggle-locked { cursor: default !important; border-color: #fff; box-shadow: none; }
+
+        /* --- BOTTOM DASHBOARD --- */
+        .score-area { text-align: center; margin-bottom: 10px; flex-shrink: 0; position: relative; display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .score-box { display: flex; flex-direction: column; align-items: center; }
+        .score-label { color: #666; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }
+        .score-value { font-size: 64px; font-weight: 800; line-height: 1; color: #fff; text-shadow: 0 2px 10px rgba(255,255,255,0.1); }
+        
+        /* Icon Buttons */
+        .icon-btn { width: 32px; height: 32px; border-radius: 50%; background: #2a2a2a; color: #aaa; border: 1px solid #444; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .icon-btn:hover { background: #444; color: white; border-color: #666; }
+
+        .controls-area { display: flex; gap: 10px; margin-bottom: 15px; flex-shrink: 0; }
+        #roll-btn { background: #fff; color: #000; border: none; padding: 12px 40px; font-size: 18px; font-weight: 800; border-radius: 30px; cursor: pointer; transition: transform 0.1s; box-shadow: 0 4px 15px rgba(255,255,255,0.1); }
+        #roll-btn:active { transform: scale(0.95); }
+        #roll-btn:disabled { background: #444; color: #777; box-shadow: none; }
+
+        .details-toggle { background: #2a2a2a; color: #aaa; border: 1px solid #333; padding: 12px 15px; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+        .details-toggle.active { background: #333; color: white; border-color: #555; }
+
+        #stats-grid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; overflow-y: auto; padding-bottom: 10px; transition: opacity 0.3s; opacity: 0; pointer-events: none; height: 0; }
+        #stats-grid.visible { opacity: 1; pointer-events: auto; height: auto; flex-grow: 1; }
+
+        .stat-row { display: flex; align-items: center; background: #1e1e1e; padding: 10px 15px; border-radius: 8px; border: 1px solid #2a2a2a; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 12px; }
+        .stat-text { flex: 1; display: flex; justify-content: space-between; font-size: 13px; align-items: center; }
+        .stat-label { color: #888; font-weight: 500; }
+        .stat-val { font-weight: 700; color: #ddd; }
+        .stat-highlight { color: #fff; }
+
+        /* --- MODAL COMMON --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+        .modal-content { background: #1e1e1e; padding: 25px; border-radius: 16px; border: 1px solid #333; width: 90%; max-width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.7); display: flex; flex-direction: column; max-height: 80vh; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .modal-title { margin: 0; font-size: 18px; font-weight: 800; color: white; letter-spacing: 0.5px; }
+        .close-icon { background: none; border: none; color: #666; font-size: 24px; cursor: pointer; padding: 0; line-height: 1; }
+        .close-icon:hover { color: #fff; }
+
+        /* --- PROBABILITY TABLE --- */
+        .prob-table { width: 100%; border-collapse: collapse; font-size: 14px; color: #ddd; }
+        .prob-table th { text-align: left; padding: 8px; border-bottom: 1px solid #444; color: #888; font-size: 12px; text-transform: uppercase; }
+        .prob-table td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
+        .prob-bar-bg { width: 60px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 8px; }
+        .prob-bar-fill { height: 100%; background: #4a90e2; }
+
+        /* --- HISTORY LOG --- */
+        .history-list { overflow-y: auto; flex: 1; padding-right: 5px; }
+        .history-item { background: #252525; border-radius: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid #333; }
+        .history-header { display: flex; justify-content: space-between; margin-bottom: 8px; align-items: center; }
+        .history-id { font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase; }
+        .history-sum { font-size: 16px; font-weight: 800; color: #fff; }
+        .history-dice-row { display: flex; gap: 8px; flex-wrap: wrap; }
+        .mini-die { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #333; color: #ccc; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+        .mini-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "react": "https://esm.sh/react@18.2.0",
+                "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+                "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.15.12?external=react,react-dom,three",
+                "@react-three/drei": "https://esm.sh/@react-three/drei@9.99.0?external=react,react-dom,three,@react-three/fiber"
+            }
+        }
+    </script>
+    <script type="module" src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useRef, useEffect } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Canvas, useFrame } from '@react-three/fiber';
+        import { RoundedBox, Text, Environment } from '@react-three/drei';
+
+        // --- CONFIG ---
+        const INITIAL_DICE = [
+            { id: "w1", color: "#ffffff", type: "white", pipColor: "#000000", value: 1, active: true },
+            { id: "w2", color: "#ffffff", type: "white", pipColor: "#000000", value: 1, active: true },
+            { id: "r1", color: "#ff0000", type: "color", label: "Red", pipColor: "#000000", value: 1, active: true },
+            { id: "b1", color: "#0088ff", type: "color", label: "Blue", pipColor: "#000000", value: 1, active: true },
+            { id: "g1", color: "#00bb00", type: "color", label: "Green", pipColor: "#000000", value: 1, active: true },
+            { id: "y1", color: "#ffcc00", type: "color", label: "Yellow", pipColor: "#000000", value: 1, active: true },
+        ];
+
+        const PROBABILITIES = [
+            { sum: 2, pct: 2.8 }, { sum: 3, pct: 5.6 }, { sum: 4, pct: 8.3 },
+            { sum: 5, pct: 11.1 }, { sum: 6, pct: 13.9 }, { sum: 7, pct: 16.7 },
+            { sum: 8, pct: 13.9 }, { sum: 9, pct: 11.1 }, { sum: 10, pct: 8.3 },
+            { sum: 11, pct: 5.6 }, { sum: 12, pct: 2.8 }
+        ];
+
+        // --- 3D DIE COMPONENT ---
+        const Die = ({ position, color, pipColor, value, active, rolling }) => {
+            const mesh = useRef();
+            useFrame((state, delta) => {
+                if (!mesh.current) return;
+                if (rolling) {
+                    mesh.current.rotation.x += delta * 15;
+                    mesh.current.rotation.z += delta * 10;
+                } else {
+                    mesh.current.rotation.set(0, 0, 0);
+                }
+            });
+
+            if (!active) return null;
+
+            return React.createElement('group', { position }, 
+                React.createElement(RoundedBox, { ref: mesh, args: [1, 1, 1], radius: 0.15, smoothness: 4 },
+                    React.createElement('meshStandardMaterial', { color: color, roughness: 0.7, metalness: 0.0 })
+                ),
+                !rolling && React.createElement(Text, {
+                    rotation: [-Math.PI / 2, 0, 0], 
+                    position: [0, 0.51, 0], 
+                    fontSize: 0.6,
+                    fontWeight: 800,
+                    color: pipColor,
+                    anchorX: "center",
+                    anchorY: "middle"
+                }, value)
+            );
+        };
+
+        // --- APP ---
+        const App = () => {
+            const [dice, setDice] = useState(INITIAL_DICE);
+            const [rolling, setRolling] = useState(false);
+            const [showStats, setShowStats] = useState(false);
+            const [modalOpen, setModalOpen] = useState(null); // 'prob' or 'history'
+            const [history, setHistory] = useState([]);
+
+            const handleRoll = () => {
+                setRolling(true);
+                setTimeout(() => {
+                    // Generate new values
+                    const newDice = dice.map(d => ({
+                        ...d,
+                        value: d.active ? Math.floor(Math.random() * 6) + 1 : d.value
+                    }));
+                    
+                    setDice(newDice);
+                    setRolling(false);
+
+                    // Add to History (RAM)
+                    const activeWhites = newDice.filter(d => d.type === 'white' && d.active);
+                    const whiteSum = activeWhites.reduce((a, b) => a + b.value, 0);
+                    
+                    setHistory(prev => [{
+                        id: prev.length + 1,
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        whiteSum: whiteSum,
+                        diceSnapshot: JSON.parse(JSON.stringify(newDice.filter(d => d.active))) // store copy
+                    }, ...prev]);
+
+                }, 600);
+            };
+
+            const toggleDie = (id, type) => {
+                if (type === 'white') return;
+                setDice(prev => prev.map(d => d.id === id ? { ...d, active: !d.active } : d));
+            };
+
+            const whites = dice.filter(d => d.type === 'white' && d.active);
+            const colors = dice.filter(d => d.type === 'color' && d.active);
+            const whiteSum = whites.reduce((a, b) => a + b.value, 0);
+            const whiteVals = whites.map(d => d.value);
+            const wMax = whiteVals.length ? Math.max(...whiteVals) : 0;
+            const wMin = whiteVals.length ? Math.min(...whiteVals) : (whiteVals.length === 1 ? whiteVals[0] : 0);
+
+            return React.createElement('div', { style: { height: '100%', display: 'flex', flexDirection: 'column' } },
+                
+                // --- TOP 65%: VISUALS ---
+                React.createElement('div', { id: 'canvas-container' },
+                    
+                    React.createElement('div', { id: 'toggles-container' },
+                        dice.map(d => React.createElement('div', {
+                            key: d.id,
+                            className: `toggle-btn ${d.active ? '' : 'toggle-off'} ${d.type === 'white' ? 'toggle-locked' : ''}`,
+                            style: { backgroundColor: d.color, borderColor: d.pipColor },
+                            onClick: () => toggleDie(d.id, d.type)
+                        }))
+                    ),
+
+                    React.createElement(Canvas, { camera: { position: [0, 9, 0.1], fov: 45 }, shadows: true },
+                        React.createElement('ambientLight', { intensity: 0.6 }),
+                        React.createElement('pointLight', { position: [10, 10, 10], intensity: 1 }),
+                        dice.map((d, i) => {
+                            const col = i % 3;
+                            const row = Math.floor(i / 3);
+                            const x = (col * 1.8) - 1.8; 
+                            const z = (row * 2.0) - 2.5; 
+                            return React.createElement(Die, { key: d.id, ...d, position: [x, 0, z], rolling });
+                        }),
+                        React.createElement(Environment, { preset: "park" })
+                    )
+                ),
+
+                // --- BOTTOM 35%: DASHBOARD ---
+                React.createElement('div', { id: 'ui-container' },
+                    
+                    // Hero Sum Row with Icons
+                    React.createElement('div', { className: 'score-area' },
+                         // History Button
+                         React.createElement('button', { 
+                            className: 'icon-btn',
+                            onClick: () => setModalOpen('history')
+                        }, '🕒'), // Clock Icon
+
+                        React.createElement('div', { className: 'score-box' },
+                            React.createElement('div', { className: 'score-label' }, 'White Sum'),
+                            React.createElement('div', { className: 'score-value' }, whiteSum)
+                        ),
+
+                        // Probability Button
+                        React.createElement('button', { 
+                            className: 'icon-btn',
+                            onClick: () => setModalOpen('prob')
+                        }, '?')
+                    ),
+
+                    React.createElement('div', { className: 'controls-area' },
+                        React.createElement('button', { 
+                            id: 'roll-btn', 
+                            onClick: handleRoll, 
+                            disabled: rolling 
+                        }, rolling ? 'Rolling...' : 'ROLL'),
+                        
+                        React.createElement('button', { 
+                            className: `details-toggle ${showStats ? 'active' : ''}`,
+                            onClick: () => setShowStats(!showStats)
+                        }, showStats ? 'Hide' : 'Details')
+                    ),
+
+                    React.createElement('div', { id: 'stats-grid', className: showStats ? 'visible' : '' },
+                         colors.map(d => React.createElement('div', { key: d.id, className: 'stat-row' },
+                            React.createElement('div', { className: 'dot', style: { backgroundColor: d.color } }),
+                            React.createElement('div', { className: 'stat-text' },
+                                React.createElement('span', { className: 'stat-label' }, d.label),
+                                React.createElement('span', { className: 'stat-val' }, 
+                                    `Max `, React.createElement('span', { className: 'stat-highlight'}, wMax + d.value),
+                                    ` / Min `, React.createElement('span', { className: 'stat-highlight'}, wMin + d.value)
+                                )
+                            )
+                        ))
+                    )
+                ),
+
+                // --- MODAL: PROBABILITY ---
+                React.createElement('div', { className: `modal-overlay ${modalOpen === 'prob' ? 'open' : ''}`, onClick: (e) => { if(e.target === e.currentTarget) setModalOpen(null) } },
+                    React.createElement('div', { className: 'modal-content' },
+                        React.createElement('div', { className: 'modal-header' }, 
+                            React.createElement('h3', { className: 'modal-title' }, 'Probabilities'),
+                            React.createElement('button', { className: 'close-icon', onClick: () => setModalOpen(null) }, '×')
+                        ),
+                        React.createElement('table', { className: 'prob-table' },
+                            React.createElement('tbody', {},
+                                PROBABILITIES.map(p => 
+                                    React.createElement('tr', { key: p.sum },
+                                        React.createElement('td', { style: { fontWeight: 'bold' } }, p.sum),
+                                        React.createElement('td', {}, 
+                                            `${p.pct}%`,
+                                            React.createElement('div', { className: 'prob-bar-bg', style: { width: `${p.pct * 3}px` } },
+                                                React.createElement('div', { className: 'prob-bar-fill' })
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                ),
+
+                // --- MODAL: HISTORY ---
+                React.createElement('div', { className: `modal-overlay ${modalOpen === 'history' ? 'open' : ''}`, onClick: (e) => { if(e.target === e.currentTarget) setModalOpen(null) } },
+                    React.createElement('div', { className: 'modal-content' },
+                         React.createElement('div', { className: 'modal-header' }, 
+                            React.createElement('h3', { className: 'modal-title' }, 'Session History'),
+                            React.createElement('button', { className: 'close-icon', onClick: () => setModalOpen(null) }, '×')
+                        ),
+                        React.createElement('div', { className: 'history-list' },
+                            history.length === 0 && React.createElement('div', { style: { color: '#666', textAlign: 'center', marginTop: '20px' } }, 'No rolls yet'),
+                            history.map(entry => 
+                                React.createElement('div', { key: entry.id, className: 'history-item' },
+                                    React.createElement('div', { className: 'history-header' },
+                                        React.createElement('span', { className: 'history-id' }, `#${entry.id} • ${entry.time}`),
+                                        React.createElement('span', { className: 'history-sum' }, `White Sum: ${entry.whiteSum}`)
+                                    ),
+                                    React.createElement('div', { className: 'history-dice-row' },
+                                        entry.diceSnapshot.map(d => 
+                                            React.createElement('div', { key: d.id, className: 'mini-die' },
+                                                React.createElement('div', { className: 'mini-dot', style: { backgroundColor: d.color } }),
+                                                d.value
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
